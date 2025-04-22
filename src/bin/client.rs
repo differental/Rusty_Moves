@@ -7,7 +7,10 @@ use tokio::{
 
 use rusty_moves::{
     GameAndPlayer, Message,
-    tictactoe::{TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand, ttt_get_game_status},
+    tictactoe::{
+        TTTGameResult, TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand,
+        ttt_get_game_status,
+    },
 };
 
 #[tokio::main]
@@ -37,7 +40,7 @@ async fn main() -> io::Result<()> {
         let str = str::from_utf8(&buf[..len]).unwrap();
         println!("Received: {} ({} bytes)", str, len);
 
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(200)).await;
 
         let msg = Message::from(str);
         match msg {
@@ -69,8 +72,14 @@ async fn main() -> io::Result<()> {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
                 if let Some(client_result) = ttt_get_game_status(&game_state) {
                     if client_result.to_string() == server_result {
-                        println!("Win acknowledged. Thanks for playing, buddy server");
-                        println!("Let's play again! You can start this time");
+                        match client_result {
+                            TTTGameResult::Draw => {
+                                println!("Draw acknowledged by client.")
+                            }
+                            _ => println!("Win acknowledged by client."),
+                        };
+
+                        println!("New Game");
 
                         sleep(Duration::from_millis(10000)).await;
 
