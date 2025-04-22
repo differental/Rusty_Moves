@@ -1,39 +1,83 @@
 use core::str;
-use rand::seq::SliceRandom;
-use std::{io, net::SocketAddr};
-use tokio::net::UdpSocket;
+use std::{io, net::SocketAddr, time::Duration};
+use tokio::{net::UdpSocket, time::sleep};
 
-static SERVER_MESSAGES: [&str; 6] = [
-    "Hello, client!",
-    "How's it going client?",
-    "Ping!",
-    "Rust is awesome!",
-    "I love Rust!",
-    "UDP rocks!",
-];
+use rust_udp::{
+    GameAndPlayer, Message,
+    tictactoe::{TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand, ttt_get_game_status},
+};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let mut rng = rand::thread_rng();
-
     let addr = "0.0.0.0:8080".parse::<SocketAddr>().unwrap();
     let sock = UdpSocket::bind(addr).await?;
     println!("Server running on {}", sock.local_addr()?);
 
     let mut buf = [0; 1024];
+    let mut player = TTTPlayer::Circle;
 
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
-        println!("{:?} bytes received from {:?}", len, addr);
+        let str = str::from_utf8(&buf[..len]).unwrap();
+        println!("[{}] Received: {} ({} bytes)", addr, str, len);
 
-        println!(
-            "Server received: {:?}",
-            str::from_utf8(&buf[..len]).unwrap()
-        );
+        sleep(Duration::from_millis(500)).await;
 
-        let msg = SERVER_MESSAGES.choose(&mut rng).unwrap();
+        let msg = Message::from(str);
+        match msg {
+            Message::NewGame(GameAndPlayer::TicTacToe(opponent)) => {
+                player = match opponent {
+                    TTTPlayer::Circle => TTTPlayer::Cross,
+                    TTTPlayer::Cross => TTTPlayer::Circle,
+                };
+                let game_state = TTTGameState::new();
+                let (chosen_move, msg) = tictactoe_rand(game_state, &player);
 
-        let len = sock.send_to(msg.as_bytes(), addr).await?;
-        println!("{:?} bytes sent to {:?}", len, addr);
+                let str = msg.to_string();
+                let len = sock.send_to(str.as_bytes(), addr).await?;
+
+                pretty_print_board(&str);
+                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+            }
+            Message::GameMsg(board) => {
+                let game_state = TTTGameState::try_from(board).expect("Game invalid");
+                let (chosen_move, msg) = tictactoe_rand(game_state, &player);
+
+                let str = msg.to_string();
+                let len = sock.send_to(str.as_bytes(), addr).await?;
+
+                pretty_print_board(&str);
+                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+            }
+            Message::GameOver(board, client_result) => {
+                let game_state = TTTGameState::try_from(board).expect("Game invalid");
+                if let Some(server_result) = ttt_get_game_status(&game_state) {
+                    if server_result.to_string() == client_result {
+                        println!("Win acknowledged. Thanks for playing, buddy client");
+                        println!("Let's play again! You can start this time");
+
+                        sleep(Duration::from_millis(10000)).await;
+
+                        player = TTTPlayer::Circle;
+                        let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
+                        let str = msg.to_string();
+
+                        let len = sock.send_to(str.as_bytes(), addr).await?;
+                        println!("Sent: {} ({} bytes)", str, len);
+                    } else {
+                        println!(
+                            "Error: Result mismatch!\nClient: {}\nServer: {}\nBoard: {}",
+                            client_result, server_result, game_state
+                        );
+                    }
+                } else {
+                    println!(
+                        "Error: Result mismatch!\nClient: {}\nServer: Game not finished.\nBoard: {}",
+                        client_result, game_state
+                    );
+                }
+            }
+            Message::NewGame(GameAndPlayer::Chess(_)) => todo!(),
+        }
     }
 }
