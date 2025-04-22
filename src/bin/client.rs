@@ -29,6 +29,11 @@ async fn main() -> io::Result<()> {
     // Start off with new game
     // Server plays first move, client chooses side
     let mut player = TTTPlayer::Circle;
+
+    let mut win_count = 0;
+    let mut loss_count = 0;
+    let mut draw_count = 0;
+
     let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
     let str = msg.to_string();
 
@@ -40,7 +45,7 @@ async fn main() -> io::Result<()> {
         let str = str::from_utf8(&buf[..len]).unwrap();
         //println!("Received: {} bytes", len);
 
-        sleep(Duration::from_millis(30)).await;
+        sleep(Duration::from_millis(10)).await;
 
         let msg = Message::from(str);
         match msg {
@@ -67,22 +72,51 @@ async fn main() -> io::Result<()> {
 
                 pretty_print_board(&str);
                 println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
+
+                if let Message::GameOver(_, res) = &msg {
+                    if res == "draw" {
+                        draw_count += 1;
+                    } else {
+                        win_count += 1;
+                    }
+                    println!(
+                        "Client Stats: {} W | {} D | {} L",
+                        win_count, draw_count, loss_count
+                    );
+                    if win_count + draw_count + loss_count >= 1000 {
+                        break;
+                    }
+                    sleep(Duration::from_millis(1000)).await;
+                }
             }
             Message::GameOver(board, server_result) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
-                if let Some(client_result) = ttt_get_game_status(&game_state) {
+                if let Some(client_result) = ttt_get_game_status(&game_state, None) {
                     if client_result.to_string() == server_result {
                         match client_result {
                             TTTGameResult::Draw => {
-                                println!("Draw acknowledged by client.")
+                                println!("Draw acknowledged by client.");
+                                draw_count += 1;
                             }
-                            _ => println!("Win acknowledged by client."),
+                            _ => {
+                                println!("Win acknowledged by client.");
+                                loss_count += 1;
+                            }
                         };
+
+                        println!(
+                            "Client Stats: {} W | {} D | {} L",
+                            win_count, draw_count, loss_count
+                        );
+                        if win_count + draw_count + loss_count >= 1000 {
+                            break;
+                        }
 
                         println!("New Game");
 
-                        sleep(Duration::from_millis(10000)).await;
+                        sleep(Duration::from_millis(3000)).await;
 
+                        player = TTTPlayer::Circle;
                         let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
                         let str = msg.to_string();
 
@@ -104,4 +138,6 @@ async fn main() -> io::Result<()> {
             Message::NewGame(GameAndPlayer::Chess(_)) => todo!(),
         }
     }
+
+    Ok(())
 }
