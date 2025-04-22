@@ -33,14 +33,14 @@ async fn main() -> io::Result<()> {
     let str = msg.to_string();
 
     let len = sock.send(str.as_bytes()).await?;
-    println!("Sent: {} ({} bytes)", str, len);
+    println!("Sent: {} bytes", len);
 
     loop {
         let len = sock.recv(&mut buf[..]).await?;
         let str = str::from_utf8(&buf[..len]).unwrap();
-        println!("Received: {} ({} bytes)", str, len);
+        //println!("Received: {} bytes", len);
 
-        sleep(Duration::from_millis(200)).await;
+        sleep(Duration::from_millis(30)).await;
 
         let msg = Message::from(str);
         match msg {
@@ -56,7 +56,7 @@ async fn main() -> io::Result<()> {
                 let len = sock.send(str.as_bytes()).await?;
 
                 pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
             }
             Message::GameMsg(board) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
@@ -66,7 +66,7 @@ async fn main() -> io::Result<()> {
                 let len = sock.send(str.as_bytes()).await?;
 
                 pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
             }
             Message::GameOver(board, server_result) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
@@ -87,7 +87,7 @@ async fn main() -> io::Result<()> {
                         let str = msg.to_string();
 
                         let len = sock.send(str.as_bytes()).await?;
-                        println!("Sent: {} ({} bytes)", str, len);
+                        println!("Sent: {} bytes", len);
                     } else {
                         println!(
                             "Error: Result mismatch!\nServer: {}\nClient: {}\nBoard: {}",

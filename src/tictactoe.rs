@@ -5,7 +5,7 @@ use std::fmt;
 use crate::Message;
 
 // Implemented for possible extensibility
-static BOARD_SIZE: usize = 10;
+static BOARD_SIZE: usize = 20;
 static WIN_CONDITION: isize = 10;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -79,8 +79,12 @@ impl Default for TTTGameState {
 impl TryFrom<String> for TTTGameState {
     type Error = anyhow::Error;
     fn try_from(str: String) -> Result<Self, Self::Error> {
-        if str.len() != (BOARD_SIZE * BOARD_SIZE) as usize {
-            return Err(anyhow!("String length is not 9"));
+        if str.len() != (BOARD_SIZE * BOARD_SIZE) {
+            return Err(anyhow!(
+                "String length incorrect: Expected {}, Actual {}",
+                BOARD_SIZE * BOARD_SIZE,
+                str.len()
+            ));
         }
 
         let blocks = str
@@ -117,23 +121,28 @@ impl fmt::Display for TTTGameState {
     }
 }
 
-pub fn pretty_print_board(board: &str) {
+pub fn pretty_print_board(msg: &str) {
+    let extra_len = msg.len() - BOARD_SIZE * BOARD_SIZE; // "win"/"draw"
+    if extra_len > 0 {
+        println!("{}", &msg[0..extra_len]);
+    }
+
     for row in 0..BOARD_SIZE {
-        let start = row * BOARD_SIZE;
+        let start = extra_len + row * BOARD_SIZE;
         let end = start + BOARD_SIZE;
-        println!("{}", &board[start..end]);
+        println!("{}", &msg[start..end]);
     }
 }
 
 pub fn ttt_get_game_status(game_state: &TTTGameState) -> Option<TTTGameResult> {
-    let directions: [(i32, i32); 4] = [(0, 1), (1, 0), (1, 1), (1, -1)]; // horizontal, vertical, two diagonals
+    let directions: [(isize, isize); 4] = [(0, 1), (1, 0), (1, 1), (1, -1)]; // horizontal, vertical, two diagonals
     let board = &game_state.board;
     let mut winner: Option<TTTBlockState> = None;
     let mut is_draw = true;
 
     'outer: for i in 0..BOARD_SIZE {
         for j in 0..BOARD_SIZE {
-            if board[i as usize][j as usize] == TTTBlockState::Empty {
+            if board[i][j] == TTTBlockState::Empty {
                 is_draw = false;
                 continue;
             }
@@ -142,6 +151,7 @@ pub fn ttt_get_game_status(game_state: &TTTGameState) -> Option<TTTGameResult> {
             //   a m-in-a-row cannot start anywhere between
             //   (n-m+1, n-m+1) and (m-2, m-2)
             // Example: n=5, m=4, cannot start in (2, 2)
+            #[allow(clippy::int_plus_one)]
             if i >= BOARD_SIZE - WIN_CONDITION as usize + 1
                 && i <= WIN_CONDITION as usize - 2
                 && j >= BOARD_SIZE - WIN_CONDITION as usize + 1
@@ -150,14 +160,11 @@ pub fn ttt_get_game_status(game_state: &TTTGameState) -> Option<TTTGameResult> {
                 continue;
             }
 
-            let current = &board[i as usize][j as usize];
+            let current = &board[i][j];
             for &(dx, dy) in &directions {
                 let mut failed = false; // Whether win condition fails
                 for step in 1..WIN_CONDITION {
-                    let (px, py) = (
-                        i as isize + dx as isize * step,
-                        j as isize + dy as isize * step,
-                    );
+                    let (px, py) = (i as isize + dx * step, j as isize + dy * step);
                     if px < 0 || px >= BOARD_SIZE as isize || py < 0 || py >= BOARD_SIZE as isize {
                         failed = true;
                         break;

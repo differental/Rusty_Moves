@@ -22,9 +22,9 @@ async fn main() -> io::Result<()> {
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
         let str = str::from_utf8(&buf[..len]).unwrap();
-        println!("[{}] Received: {} ({} bytes)", addr, str, len);
+        //println!("[{}] Received: {} bytes", addr, len);
 
-        sleep(Duration::from_millis(200)).await;
+        sleep(Duration::from_millis(30)).await;
 
         let msg = Message::from(str);
         match msg {
@@ -40,7 +40,7 @@ async fn main() -> io::Result<()> {
                 let len = sock.send_to(str.as_bytes(), addr).await?;
 
                 pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
             }
             Message::GameMsg(board) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
@@ -50,7 +50,7 @@ async fn main() -> io::Result<()> {
                 let len = sock.send_to(str.as_bytes(), addr).await?;
 
                 pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} ({} bytes)", chosen_move, str, len);
+                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
             }
             Message::GameOver(board, client_result) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
@@ -63,7 +63,7 @@ async fn main() -> io::Result<()> {
                             _ => println!("Win acknowledged by server."),
                         };
 
-                        println!("Let's play again! You can start this time");
+                        println!("New Game");
 
                         sleep(Duration::from_millis(10000)).await;
 
@@ -72,7 +72,7 @@ async fn main() -> io::Result<()> {
                         let str = msg.to_string();
 
                         let len = sock.send_to(str.as_bytes(), addr).await?;
-                        println!("Sent: {} ({} bytes)", str, len);
+                        println!("Sent: {} bytes", len);
                     } else {
                         println!(
                             "Error: Result mismatch!\nClient: {}\nServer: {}\nBoard: {}",
