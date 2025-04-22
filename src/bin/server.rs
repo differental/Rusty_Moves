@@ -2,7 +2,7 @@ use core::str;
 use std::{io, net::SocketAddr, time::Duration};
 use tokio::{net::UdpSocket, time::sleep};
 
-use rust_udp::{
+use rusty_moves::{
     GameAndPlayer, Message,
     tictactoe::{TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand, ttt_get_game_status},
 };
