@@ -8,3 +8,10 @@ license = "GPL-3.0-only"
 tokio = { version = "1", features = ["macros", "net", "rt", "rt-multi-thread", "time"] }
 rand = "0.9"
 anyhow = "1.0"
+
+[profile.release-prod]
+inherits = "release"
+lto = "fat"
+strip = true
+codegen-units = 1
+panic = "abort"
