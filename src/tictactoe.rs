@@ -5,8 +5,8 @@ use std::fmt;
 use crate::Message;
 
 // Implemented for possible extensibility
-static BOARD_SIZE: usize = 5;
-static WIN_CONDITION: isize = 5;
+static BOARD_SIZE: usize = 10;
+static WIN_CONDITION: isize = 10;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TTTBlockState {
@@ -119,8 +119,8 @@ impl fmt::Display for TTTGameState {
 
 pub fn pretty_print_board(board: &str) {
     for row in 0..BOARD_SIZE {
-        let start = row * 5;
-        let end = start + 5;
+        let start = row * BOARD_SIZE;
+        let end = start + BOARD_SIZE;
         println!("{}", &board[start..end]);
     }
 }
