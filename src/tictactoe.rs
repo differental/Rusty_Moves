@@ -5,8 +5,8 @@ use std::fmt;
 use crate::Message;
 
 // Implemented for possible extensibility
-static BOARD_SIZE: usize = 20;
-static WIN_CONDITION: usize = 10;
+const BOARD_SIZE: usize = 20;
+const WIN_CONDITION: usize = 10;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TTTBlockState {

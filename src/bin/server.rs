@@ -28,7 +28,7 @@ async fn main() -> io::Result<()> {
         let str = str::from_utf8(&buf[..len]).unwrap();
         //println!("[{}] Received: {} bytes", addr, len);
 
-        sleep(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(5)).await;
 
         let msg = Message::from(str);
         match msg {
@@ -69,7 +69,7 @@ async fn main() -> io::Result<()> {
                     if win_count + draw_count + loss_count >= 1000 {
                         break;
                     }
-                    sleep(Duration::from_millis(1000)).await;
+                    sleep(Duration::from_millis(50)).await;
                 }
             }
             Message::GameOver(board, client_result) => {
@@ -97,7 +97,7 @@ async fn main() -> io::Result<()> {
 
                         println!("New Game");
 
-                        sleep(Duration::from_millis(3000)).await;
+                        sleep(Duration::from_millis(100)).await;
 
                         player = TTTPlayer::Circle;
                         let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
