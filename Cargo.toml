@@ -8,6 +8,7 @@ license = "GPL-3.0-only"
 tokio = { version = "1", features = ["macros", "net", "rt", "rt-multi-thread", "time"] }
 rand = "0.9"
 anyhow = "1.0"
+regex = "1.11.1"
 
 [profile.release-prod]
 inherits = "release"
