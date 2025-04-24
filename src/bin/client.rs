@@ -6,11 +6,9 @@ use tokio::{
 };
 
 use rusty_moves::{
-    GameAndPlayer, Message,
-    tictactoe::{
-        TTTGameResult, TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand,
-        ttt_get_game_status,
-    },
+    chess::ChessPlayer, tictactoe::{
+        pretty_print_board, tictactoe_rand, ttt_get_game_status, TTTGameResult, TTTGameState, TTTPlayer
+    }, Game, GameAndPlayer, Message
 };
 
 #[tokio::main]
@@ -28,13 +26,14 @@ async fn main() -> io::Result<()> {
 
     // Start off with new game
     // Server plays first move, client chooses side
-    let mut player = TTTPlayer::Circle;
+    let game = Game::Chess;
+    let mut player = GameAndPlayer::TicTacToe(TTTPlayer::Circle);
 
     let mut win_count = 0;
     let mut loss_count = 0;
     let mut draw_count = 0;
 
-    let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
+    let msg = Message::NewGame(GameAndPlayer::TicTacToe(TTTPlayer::Circle));
     let str = msg.to_string();
 
     let len = sock.send(str.as_bytes()).await?;
@@ -51,19 +50,29 @@ async fn main() -> io::Result<()> {
         match msg {
             Message::NewGame(GameAndPlayer::TicTacToe(opponent)) => {
                 player = match opponent {
-                    TTTPlayer::Circle => TTTPlayer::Cross,
-                    TTTPlayer::Cross => TTTPlayer::Circle,
+                    TTTPlayer::Circle => GameAndPlayer::TicTacToe(TTTPlayer::Cross),
+                    TTTPlayer::Cross => GameAndPlayer::TicTacToe(TTTPlayer::Circle),
                 };
                 let game_state = TTTGameState::new();
-                let (chosen_move, msg) = tictactoe_rand(game_state, &player);
 
-                let str = msg.to_string();
-                let len = sock.send(str.as_bytes()).await?;
-
-                pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
+                if let GameAndPlayer::TicTacToe(player) = player {
+                    let (chosen_move, msg) = tictactoe_rand(game_state, &player);
+    
+                    let str = msg.to_string();
+                    let len = sock.send(str.as_bytes()).await?;
+    
+                    pretty_print_board(&str);
+                    println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
+                } else {
+                    unreachable!()
+                }
             }
-            Message::GameMsg(board) => {
+            Message::NewGame(GameAndPlayer::Chess(_)) => {
+                // Recipient of NewGame message, also player of the first move
+                //   is always white.
+                player = GameAndPlayer::Chess(ChessPlayer::White);
+            },
+            Message::GameMsg(game, board) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
                 let (chosen_move, msg) = tictactoe_rand(game_state, &player);
 
@@ -73,7 +82,7 @@ async fn main() -> io::Result<()> {
                 pretty_print_board(&str);
                 println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
 
-                if let Message::GameOver(_, res) = &msg {
+                if let Message::GameOver(_, _, res) = &msg {
                     if res == "draw" {
                         draw_count += 1;
                     } else {
@@ -89,7 +98,7 @@ async fn main() -> io::Result<()> {
                     sleep(Duration::from_millis(50)).await;
                 }
             }
-            Message::GameOver(board, server_result) => {
+            Message::GameOver(game, board, server_result) => {
                 let game_state = TTTGameState::try_from(board).expect("Game invalid");
                 if let Some(client_result) = ttt_get_game_status(&game_state, None) {
                     if client_result.to_string() == server_result {
@@ -135,7 +144,6 @@ async fn main() -> io::Result<()> {
                     );
                 }
             }
-            Message::NewGame(GameAndPlayer::Chess(_)) => todo!(),
         }
     }
 

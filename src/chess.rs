@@ -155,6 +155,7 @@ pub fn get_stockfish_moves(player:&ChessPlayer, game_state: &ChessGameState, top
     results
 }
 
+/// Chooses a random move from top five stockfish moves (might be less than that in certain cases)
 /// player: Black or White. Determines only the evaluation in the returned game state
 /// game_state: fen and evaluation after the last move
 pub fn random_stockfish_move(player: ChessPlayer, game_state: ChessGameState) -> anyhow::Result<(String, ChessGameState)> {
