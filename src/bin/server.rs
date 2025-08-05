@@ -1,126 +1,106 @@
-use core::str;
-use std::{io, net::SocketAddr, time::Duration};
-use tokio::{net::UdpSocket, time::sleep};
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::net::SocketAddr;
+use tokio::net::UdpSocket;
+use dashmap::DashMap;
+use anyhow::{anyhow, Error};
 
-use rusty_moves::{
-    GameAndPlayer, Message,
-    tictactoe::{
-        TTTGameResult, TTTGameState, TTTPlayer, pretty_print_board, tictactoe_rand,
-        ttt_get_game_status,
-    },
-};
+enum GameState {
+    //TicTacToe(TTTGameState),
+    //Chess(ChessGameState),
+    Counting(CountingGameState)
+}
+
+struct CountingGameState {
+    start_val: i64,
+    last_sent: i64
+}
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let addr = "0.0.0.0:8080".parse::<SocketAddr>().unwrap();
-    let sock = UdpSocket::bind(addr).await?;
-    println!("Server running on {}", sock.local_addr()?);
+    let sock = Arc::new(UdpSocket::bind(addr).await?);
+    println!("Server running on {addr}");
 
-    let mut buf = [0; 1024];
-    let mut player = TTTPlayer::Circle;
+    let state: Arc<DashMap<SocketAddr, GameState>> = Default::default();
 
-    let mut win_count = 0;
-    let mut loss_count = 0;
-    let mut draw_count = 0;
+    let mut buf = [0u8; 1024];
 
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
-        let str = str::from_utf8(&buf[..len]).unwrap();
-        //println!("[{}] Received: {} bytes", addr, len);
+        let sock = Arc::clone(&sock);
+        let state = Arc::clone(&state);
 
-        sleep(Duration::from_millis(5)).await;
+        let packet = buf[..len].to_vec(); // copy
 
-        let msg = Message::from(str);
-        match msg {
-            Message::NewGame(GameAndPlayer::TicTacToe(opponent)) => {
-                player = match opponent {
-                    TTTPlayer::Circle => TTTPlayer::Cross,
-                    TTTPlayer::Cross => TTTPlayer::Circle,
-                };
-                let game_state = TTTGameState::new();
-                let (chosen_move, msg) = tictactoe_rand(game_state, &player);
-
-                let str = msg.to_string();
-                let len = sock.send_to(str.as_bytes(), addr).await?;
-
-                pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
+        tokio::spawn(async move {
+            match handle_packet(sock, state, addr, packet).await {
+                Ok(()) => (),
+                Err(err) => eprintln!("Error communicating with {addr}: {err}"),
             }
-            Message::GameMsg(board) => {
-                let game_state = TTTGameState::try_from(board).expect("Game invalid");
-                let (chosen_move, msg) = tictactoe_rand(game_state, &player);
+        });
 
-                let str = msg.to_string();
-                let len = sock.send_to(str.as_bytes(), addr).await?;
-
-                pretty_print_board(&str);
-                println!("Move: {:?}\nSent: {} bytes", chosen_move, len);
-
-                if let Message::GameOver(_, res) = &msg {
-                    if res == "draw" {
-                        draw_count += 1;
-                    } else {
-                        win_count += 1;
-                    }
-                    println!(
-                        "Server Stats: {} W | {} D | {} L",
-                        win_count, draw_count, loss_count
-                    );
-                    if win_count + draw_count + loss_count >= 1000 {
-                        break;
-                    }
-                    sleep(Duration::from_millis(50)).await;
-                }
-            }
-            Message::GameOver(board, client_result) => {
-                let game_state = TTTGameState::try_from(board).expect("Game invalid");
-                if let Some(server_result) = ttt_get_game_status(&game_state, None) {
-                    if server_result.to_string() == client_result {
-                        match server_result {
-                            TTTGameResult::Draw => {
-                                println!("Draw acknowledged by server.");
-                                draw_count += 1;
-                            }
-                            _ => {
-                                println!("Win acknowledged by server.");
-                                loss_count += 1;
-                            }
-                        };
-
-                        println!(
-                            "Server Stats: {} W | {} D | {} L",
-                            win_count, draw_count, loss_count
-                        );
-                        if win_count + draw_count + loss_count >= 1000 {
-                            break;
-                        }
-
-                        println!("New Game");
-
-                        sleep(Duration::from_millis(100)).await;
-
-                        player = TTTPlayer::Circle;
-                        let msg = Message::NewGame(GameAndPlayer::TicTacToe(player));
-                        let str = msg.to_string();
-
-                        let len = sock.send_to(str.as_bytes(), addr).await?;
-                        println!("Sent: {} bytes", len);
-                    } else {
-                        println!(
-                            "Error: Result mismatch!\nClient: {}\nServer: {}\nBoard: {}",
-                            client_result, server_result, game_state
-                        );
-                    }
-                } else {
-                    println!(
-                        "Error: Result mismatch!\nClient: {}\nServer: Game not finished.\nBoard: {}",
-                        client_result, game_state
-                    );
-                }
-            }
-            Message::NewGame(GameAndPlayer::Chess(_)) => todo!(),
-        }
     }
 
+    Ok(())
+}
+
+async fn handle_packet(
+    socket: Arc<UdpSocket>,
+    state: Arc<DashMap<SocketAddr, GameState>>,
+    addr: SocketAddr,
+    packet: Vec<u8>
+) -> anyhow::Result<()> {
+    let msg = from_utf8(&packet)?.trim();
+    // parse into game message here
+
+    let mut start = 0;
+
+    if msg.len() > 8 && &msg[0..8] == "ggstart:" {
+        start = msg[8..].parse::<i64>()?;
+
+        // DashMap doesn't require locking and works just like RwLock<HashMap<>> but faster.
+        let reply = start + 1;
+
+        state.insert(
+            addr,
+            GameState::Counting(CountingGameState { start_val: start, last_sent: reply })
+        );
+        
+        socket.send_to(reply.to_string().as_bytes(), addr).await?;
+
+    } else if msg.len() > 3 && &msg[0..3] == "gg:" {
+        let response = msg[3..].parse::<i64>()?;
+
+        // DashMap doesn't require locking and works just like RwLock<HashMap<>> but faster.
+        let mut entry = match state.get_mut(&addr) {
+            Some(entry) => entry,
+            None => {
+                socket.send_to("Active game not found.".as_bytes(), addr).await?;
+                return Err(anyhow::anyhow!("No value found"));
+            }
+        };
+
+        let game_state = entry.value_mut();
+        if let GameState::Counting(counting_game_state) = game_state {
+            let CountingGameState{ start_val: _, last_sent } = counting_game_state;
+            if response == *last_sent + 1 {
+                let reply = response + 1;
+                *last_sent = reply;
+                socket.send_to(reply.to_string().as_bytes(), addr).await?;
+            } else {
+                // Wrong answer!
+                socket.send_to("Wrong number!".as_bytes(), addr).await?;
+            }
+        } else {
+            let reply = response + 1;
+            *game_state = GameState::Counting(CountingGameState { start_val: response, last_sent: reply });
+            socket.send_to(reply.to_string().as_bytes(), addr).await?;
+        }
+    } else {
+        socket.send_to("Not Supported".to_string().as_bytes(), addr).await?;
+        return unimplemented!();
+    }
+    
     Ok(())
 }

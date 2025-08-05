@@ -5,9 +5,10 @@ edition = "2024"
 license = "GPL-3.0-only"
 
 [dependencies]
-tokio = { version = "1", features = ["macros", "net", "rt", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["full"] }
 rand = "0.9"
 anyhow = "1.0"
+dashmap = "6.1"
 
 [profile.release-prod]
 inherits = "release"
